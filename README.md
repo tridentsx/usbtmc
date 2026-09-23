@@ -41,27 +41,36 @@ $ go get github.com/gotmc/usbtmc
 
 ## Usage
 
-To use the [usbtmc][gousbtmc] package, you must register which Go-based
-[libusb][] interface library should be used. [libusb][] is "a C library
-that provides generic access to USB devices." There are two Go-based
-libusb hardware interface libraries available:
+To use the [usbtmc][gousbtmc] package, you must register which USB driver
+backend should be used. Three backends are available:
 
-- [github.com/google/gousb][gousb]
-- [github.com/gotmc/libusb][golibusb]
+- [github.com/google/gousb][gousb] — Go bindings for the [libusb][] C
+  library
+- [github.com/gotmc/libusb][golibusb] — another set of Go bindings for the
+  [libusb][] C library
+- [github.com/tridentsx/go-usb][gousb2] — a pure Go USB backend with no
+  cgo and no [libusb][] C library dependency
+
+The first two require [libusb][] ("a C library that provides generic
+access to USB devices") installed on the system and a C compiler (cgo) to
+build. The third needs neither: `driver/tridentsx` builds and
+cross-compiles with nothing but the Go toolchain.
 
 You'll need to install **_one_** of the above libraries using:
 
 ```bash
 $ go get -v github.com/google/gousb
 $ go get -v github.com/gotmc/gotmc
+$ go get -v github.com/tridentsx/go-usb
 ```
 
-To indicate which libusb interface library should be used, include
-**_one_** of the following blank imports:
+To indicate which driver backend should be used, include **_one_** of the
+following blank imports:
 
 ```go
 import _ "github.com/gotmc/usbtmc/driver/google"
 import _ "github.com/gotmc/usbtmc/driver/gotmc"
+import _ "github.com/gotmc/usbtmc/driver/tridentsx"
 ```
 
 ## Documentation
@@ -115,6 +124,7 @@ maintainability, or reliability.
 [godoc link]: https://godoc.org/github.com/gotmc/usbtmc
 [golibusb]: https://github.com/gotmc/libusb
 [gousb]: https://github.com/google/gousb
+[gousb2]: https://github.com/tridentsx/go-usb
 [gousbtmc]: https://github.com/gotmc/usbtmc
 [ivi]: https://github.com/gotmc/ivi
 [ivi-foundation]: http://www.ivifoundation.org/
