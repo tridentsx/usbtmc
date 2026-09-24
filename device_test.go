@@ -10,6 +10,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"testing"
+
+	"github.com/gotmc/usbtmc/wire"
 )
 
 // mockUSBDevice records writes and replays reads for testing.
@@ -62,9 +64,9 @@ func (m *mockUSBDevice) String() string {
 // with the given bTag and payload.
 func buildDevDepMsgInResponse(bTag byte, payload []byte) []byte {
 	hdr := make([]byte, usbtmcHeaderLen)
-	hdr[0] = byte(devDepMsgIn)
+	hdr[0] = byte(wire.DevDepMsgIn)
 	hdr[1] = bTag
-	hdr[2] = invertbTag(bTag)
+	hdr[2] = wire.InvertTag(bTag)
 	hdr[3] = 0x00
 	binary.LittleEndian.PutUint32(hdr[4:8], uint32(len(payload))) //nolint:gosec
 	hdr[8] = 0x01                                                 // EOM
@@ -101,10 +103,10 @@ func TestWriteSingleChunk(t *testing.T) {
 		t.Fatalf("expected 1 USB write, got %d", len(mock.writes))
 	}
 
-	// Verify header: msgID=devDepMsgOut(1), bTag=1, transferSize=6, EOM=1.
+	// Verify header: msgID=wire.DevDepMsgOut(1), bTag=1, transferSize=6, EOM=1.
 	w := mock.writes[0]
-	if w[0] != byte(devDepMsgOut) {
-		t.Errorf("msgID = %d, want %d", w[0], devDepMsgOut)
+	if w[0] != byte(wire.DevDepMsgOut) {
+		t.Errorf("msgID = %d, want %d", w[0], wire.DevDepMsgOut)
 	}
 	if w[1] != 1 {
 		t.Errorf("bTag = %d, want 1", w[1])
@@ -117,7 +119,7 @@ func TestWriteSingleChunk(t *testing.T) {
 		t.Errorf("EOM = %d, want 1", w[8])
 	}
 	// Verify payload follows header.
-	payload := w[bulkOutHeaderSize : bulkOutHeaderSize+len(data)]
+	payload := w[wire.HeaderSize : wire.HeaderSize+len(data)]
 	for i, b := range payload {
 		if b != data[i] {
 			t.Errorf("payload[%d] = %x, want %x", i, b, data[i])
@@ -129,7 +131,7 @@ func TestWriteMultiChunk(t *testing.T) {
 	mock := &mockUSBDevice{}
 	dev := newTestDevice(mock)
 
-	// Create data larger than maxTransferSize - bulkOutHeaderSize (500 bytes).
+	// Create data larger than maxTransferSize - wire.HeaderSize (500 bytes).
 	data := make([]byte, 600)
 	for i := range data {
 		data[i] = byte(i % 256)
@@ -176,12 +178,12 @@ func TestReadSingleTransfer(t *testing.T) {
 		t.Errorf("Read data = %q, want %q", buf[:n], payload)
 	}
 
-	// Verify the request header was sent (requestDevDepMsgIn).
+	// Verify the request header was sent (wire.RequestDevDepMsgIn).
 	if len(mock.writes) != 1 {
 		t.Fatalf("expected 1 write for request header, got %d", len(mock.writes))
 	}
-	if mock.writes[0][0] != byte(requestDevDepMsgIn) {
-		t.Errorf("request msgID = %d, want %d", mock.writes[0][0], requestDevDepMsgIn)
+	if mock.writes[0][0] != byte(wire.RequestDevDepMsgIn) {
+		t.Errorf("request msgID = %d, want %d", mock.writes[0][0], wire.RequestDevDepMsgIn)
 	}
 }
 
@@ -224,7 +226,7 @@ func TestCommand(t *testing.T) {
 	// Extract payload from the write (skip 12-byte header).
 	w := mock.writes[0]
 	transferSize := binary.LittleEndian.Uint32(w[4:8])
-	payload := string(w[bulkOutHeaderSize : bulkOutHeaderSize+transferSize])
+	payload := string(w[wire.HeaderSize : wire.HeaderSize+transferSize])
 	expected := "FREQ 1000\n"
 	if payload != expected {
 		t.Errorf("Command payload = %q, want %q", payload, expected)
@@ -313,9 +315,9 @@ func TestReadWrongMsgID(t *testing.T) {
 	mock := &mockUSBDevice{}
 	dev := newTestDevice(mock)
 
-	// Build a response with wrong msgID (devDepMsgOut instead of devDepMsgIn).
+	// Build a response with wrong msgID (wire.DevDepMsgOut instead of wire.DevDepMsgIn).
 	resp := buildDevDepMsgInResponse(1, []byte("data"))
-	resp[0] = byte(devDepMsgOut)
+	resp[0] = byte(wire.DevDepMsgOut)
 	mock.reads = [][]byte{resp}
 
 	buf := make([]byte, 100)

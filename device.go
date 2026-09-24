@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/gotmc/usbtmc/driver"
+	"github.com/gotmc/usbtmc/wire"
 )
 
 const (
@@ -58,13 +59,13 @@ func (d *Device) WriteBinary(ctx context.Context, p []byte) (n int, err error) {
 		if err := ctx.Err(); err != nil {
 			return pos, err
 		}
-		d.bTag = nextbTag(d.bTag)
+		d.bTag = wire.NextTag(d.bTag)
 		thisLen := len(p[pos:])
-		if thisLen > maxTransferSize-bulkOutHeaderSize {
-			thisLen = maxTransferSize - bulkOutHeaderSize
+		if thisLen > maxTransferSize-wire.HeaderSize {
+			thisLen = maxTransferSize - wire.HeaderSize
 		}
 		isLastChunk := pos+thisLen >= len(p)
-		header := encodeBulkOutHeader(d.bTag, uint32(thisLen), isLastChunk)
+		header := wire.EncodeBulkOutHeader(d.bTag, uint32(thisLen), isLastChunk)
 		data := append(header[:], p[pos:pos+thisLen]...)
 		if moduloFour := len(data) % 4; moduloFour > 0 {
 			numAlignment := 4 - moduloFour
@@ -88,8 +89,8 @@ func (d *Device) doRead(ctx context.Context, p []byte, useTermChar bool) (n int,
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	d.bTag = nextbTag(d.bTag)
-	header := encodeMsgInBulkOutHeader(d.bTag, uint32(len(p)), //nolint:gosec
+	d.bTag = wire.NextTag(d.bTag)
+	header := wire.EncodeRequestDevDepMsgInHeader(d.bTag, uint32(len(p)), //nolint:gosec
 		useTermChar && d.termCharEnabled, d.termChar)
 	if _, err = d.usbDevice.WriteContext(ctx, header[:]); err != nil {
 		return 0, err
@@ -174,28 +175,28 @@ func (d *Device) ReadRaw(p []byte) (n int, err error) {
 }
 
 func inHdrToString(buf []byte) string {
-	id, bTag, bTagInverse := msgID(buf[0]), buf[1], buf[2]
+	id, bTag, bTagInverse := wire.MessageID(buf[0]), buf[1], buf[2]
 
 	out := "type "
 	switch id {
-	case devDepMsgOut:
+	case wire.DevDepMsgOut:
 		out += "1???" // no response expected
-	case devDepMsgIn:
+	case wire.DevDepMsgIn:
 		out += "dvdp"
-	case vendorSpecificOut:
+	case wire.VendorSpecificOut:
 		out += "126?" // no response expected
-	case vendorSpecificIn:
+	case wire.VendorSpecificIn:
 		out += "vnsp"
 	default:
 		out += fmt.Sprintf("R%03d", id)
 	}
 
 	out += fmt.Sprintf(" tag % 3d", bTag)
-	if invertbTag(bTag) != bTagInverse {
+	if wire.InvertTag(bTag) != bTagInverse {
 		out += fmt.Sprintf(" bad inv % 3d", bTagInverse)
 	}
 
-	if msgID(id) == devDepMsgIn {
+	if wire.MessageID(id) == wire.DevDepMsgIn {
 		out += fmt.Sprintf(" sz %d", binary.LittleEndian.Uint32(buf[4:8]))
 
 		attr := buf[8]
@@ -246,21 +247,21 @@ func (d *Device) readRemoveHeader(
 	debug.Printf("readRemoveHeader: header %s\n", inHdrToString(temp))
 
 	// Validate the response header per USBTMC Table 5.
-	respMsgID := msgID(temp[0])
-	if respMsgID != devDepMsgIn {
+	respMsgID := wire.MessageID(temp[0])
+	if respMsgID != wire.DevDepMsgIn {
 		return 0, 0, 0, fmt.Errorf(
 			"unexpected MsgID: got %d, want %d (DEV_DEP_MSG_IN)",
-			respMsgID, devDepMsgIn)
+			respMsgID, wire.DevDepMsgIn)
 	}
 	respBTag := temp[1]
 	if respBTag != expectedBTag {
 		return 0, 0, 0, fmt.Errorf(
 			"bTag mismatch: got %d, want %d", respBTag, expectedBTag)
 	}
-	if temp[2] != invertbTag(respBTag) {
+	if temp[2] != wire.InvertTag(respBTag) {
 		return 0, 0, 0, fmt.Errorf(
 			"bTagInverse mismatch: got %d, want %d",
-			temp[2], invertbTag(respBTag))
+			temp[2], wire.InvertTag(respBTag))
 	}
 
 	t32 := binary.LittleEndian.Uint32(temp[4:8])
