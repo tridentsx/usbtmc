@@ -60,10 +60,7 @@ func (d *Device) WriteBinary(ctx context.Context, p []byte) (n int, err error) {
 			return pos, err
 		}
 		d.bTag = wire.NextTag(d.bTag)
-		thisLen := len(p[pos:])
-		if thisLen > maxTransferSize-wire.HeaderSize {
-			thisLen = maxTransferSize - wire.HeaderSize
-		}
+		thisLen := min(len(p[pos:]), maxTransferSize-wire.HeaderSize)
 		isLastChunk := pos+thisLen >= len(p)
 		header := wire.EncodeBulkOutHeader(d.bTag, uint32(thisLen), isLastChunk)
 		data := append(header[:], p[pos:pos+thisLen]...)
